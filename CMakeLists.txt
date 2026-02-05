@@ -18,22 +18,33 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(mmw)
 set(BUILD_BROKER ON CACHE BOOL "Build broker executable")
 
-set(SFML_BUILD_SHARED_LIBS OFF CACHE BOOL "Build SFML as static" FORCE)
-
-# Fetch SFML
+# Fetch SFML (unchanged)
 FetchContent_Declare(
     SFML
     GIT_REPOSITORY https://github.com/SFML/SFML.git
-    GIT_TAG 2.5.1 # or latest stable tag
+    GIT_TAG 2.5.1
 )
 FetchContent_MakeAvailable(SFML)
 
-# Create chat executable
-# add_executable(chat main.cpp)
+# Add executables
 add_executable(Server Server.cpp)
 add_executable(Client Client.cpp)
 
-# Link against middleware
+# Link against middleware and SFML
 target_link_libraries(Server PRIVATE mmw::mmw pthread sfml-graphics sfml-window sfml-system)
 target_link_libraries(Client PRIVATE mmw::mmw pthread sfml-graphics sfml-window sfml-system)
 
+# === Force static linking of GCC runtime + pthread on MinGW ===
+if(MINGW)
+    # Force static linking of libgcc and libstdc++
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -static-libgcc -static-libstdc++")
+
+    # Link static winpthread
+    set(WINPTHREAD_STATIC "C:/msys64/mingw64/lib/libwinpthread.a")
+    if(EXISTS "${WINPTHREAD_STATIC}")
+        target_link_libraries(Server PRIVATE "${WINPTHREAD_STATIC}")
+        target_link_libraries(Client PRIVATE "${WINPTHREAD_STATIC}")
+    else()
+        message(FATAL_ERROR "Static winpthread not found at ${WINPTHREAD_STATIC}")
+    endif()
+endif()
