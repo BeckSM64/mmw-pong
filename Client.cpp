@@ -17,7 +17,7 @@ public:
     ~Network() { mmw_cleanup(); }
 
     void sendInput(float dy) {
-        PaddleInput in{myId, dy};
+        PaddleInput in{ myId, dy };
         mmw_publish_raw("input", &in, sizeof(in), MMW_BEST_EFFORT);
     }
 
@@ -53,9 +53,14 @@ int main(int argc, char** argv) {
     window.setView(view);
     window.setFramerateLimit(60);
 
-    sf::Clock sendClock;
-    const float sendInterval = 1.f / 20.f;
     const float paddleSpeed = 600.f;
+    const float sendInterval = 1.f / 20.f;
+
+    sf::Clock frameClock;
+    sf::Clock sendClock;
+
+    float localLeftY  = 540.f;
+    float localRightY = 540.f;
 
     while (window.isOpen()) {
         sf::Event e;
@@ -64,37 +69,62 @@ int main(int argc, char** argv) {
                 window.close();
         }
 
-        float dy = 0.f;
+        float dt = frameClock.restart().asSeconds();
 
-        // Player-specific keys
+        float localDy = 0.f;
+        float netDy   = 0.f;
+
         if (myId == 1) {
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::W))
-                dy -= paddleSpeed * sendInterval;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::S))
-                dy += paddleSpeed * sendInterval;
-        } else if (myId == 2) {
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up))
-                dy -= paddleSpeed * sendInterval;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down))
-                dy += paddleSpeed * sendInterval;
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) {
+                localDy -= paddleSpeed * dt;
+                netDy   -= paddleSpeed * sendInterval;
+            }
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) {
+                localDy += paddleSpeed * dt;
+                netDy   += paddleSpeed * sendInterval;
+            }
+
+            localLeftY += localDy;
+            if (localLeftY < 80.f)   localLeftY = 80.f;
+            if (localLeftY > 1000.f) localLeftY = 1000.f;
+        }
+        else if (myId == 2) {
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
+                localDy -= paddleSpeed * dt;
+                netDy   -= paddleSpeed * sendInterval;
+            }
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down)) {
+                localDy += paddleSpeed * dt;
+                netDy   += paddleSpeed * sendInterval;
+            }
+
+            localRightY += localDy;
+            if (localRightY < 80.f)   localRightY = 80.f;
+            if (localRightY > 1000.f) localRightY = 1000.f;
         }
 
-        if (dy != 0.f && sendClock.getElapsedTime().asSeconds() >= sendInterval) {
-            net.sendInput(dy);
+        if (netDy != 0.f && sendClock.getElapsedTime().asSeconds() >= sendInterval) {
+            net.sendInput(netDy);
             sendClock.restart();
         }
 
         GameState s = net.getState();
+
+        // Reconcile only remote paddle
+        if (myId == 1)
+            localRightY = s.right.y;
+        else
+            localLeftY = s.left.y;
 
         window.clear(sf::Color::Black);
 
         sf::RectangleShape paddle({20.f, 160.f});
         paddle.setOrigin(10.f, 80.f);
 
-        paddle.setPosition(40.f, s.left.y);
+        paddle.setPosition(40.f, localLeftY);
         window.draw(paddle);
 
-        paddle.setPosition(1880.f, s.right.y);
+        paddle.setPosition(1880.f, localRightY);
         window.draw(paddle);
 
         sf::CircleShape ball(10.f);
@@ -105,4 +135,3 @@ int main(int argc, char** argv) {
         window.display();
     }
 }
-
