@@ -44,14 +44,41 @@ private:
 
 Network* Network::instance = nullptr;
 
+/* ---------- 16:9 VIEW HANDLING ---------- */
+static void updateLetterboxView(sf::RenderWindow& window, sf::View& view) {
+    const float targetRatio = 16.f / 9.f;
+    sf::Vector2u size = window.getSize();
+    float windowRatio = static_cast<float>(size.x) / size.y;
+
+    float vpX = 0.f, vpY = 0.f, vpW = 1.f, vpH = 1.f;
+
+    if (windowRatio > targetRatio) {
+        // Pillarbox
+        vpW = targetRatio / windowRatio;
+        vpX = (1.f - vpW) * 0.5f;
+    } else {
+        // Letterbox
+        vpH = windowRatio / targetRatio;
+        vpY = (1.f - vpH) * 0.5f;
+    }
+
+    view.setViewport(sf::FloatRect(vpX, vpY, vpW, vpH));
+}
+
 int main(int argc, char** argv) {
     uint32_t myId = (argc > 1) ? std::atoi(argv[1]) : 1;
     Network net(myId);
 
-    sf::RenderWindow window(sf::VideoMode(1280, 720), "MMW Pong");
-    sf::View view(sf::FloatRect(0, 0, 1920, 1080));
-    window.setView(view);
+    sf::RenderWindow window(
+        sf::VideoMode(1280, 720),
+        "MMW Pong",
+        sf::Style::Default
+    );
     window.setFramerateLimit(60);
+
+    sf::View view(sf::FloatRect(0.f, 0.f, 1920.f, 1080.f));
+    updateLetterboxView(window, view);
+    window.setView(view);
 
     const float paddleSpeed = 600.f;
     const float sendInterval = 1.f / 20.f;
@@ -67,6 +94,11 @@ int main(int argc, char** argv) {
         while (window.pollEvent(e)) {
             if (e.type == sf::Event::Closed)
                 window.close();
+
+            if (e.type == sf::Event::Resized) {
+                updateLetterboxView(window, view);
+                window.setView(view);
+            }
         }
 
         float dt = frameClock.restart().asSeconds();
@@ -87,8 +119,7 @@ int main(int argc, char** argv) {
             localLeftY += localDy;
             if (localLeftY < 80.f)   localLeftY = 80.f;
             if (localLeftY > 1000.f) localLeftY = 1000.f;
-        }
-        else if (myId == 2) {
+        } else {
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
                 localDy -= paddleSpeed * dt;
                 netDy   -= paddleSpeed * sendInterval;
@@ -110,7 +141,6 @@ int main(int argc, char** argv) {
 
         GameState s = net.getState();
 
-        // Reconcile only remote paddle
         if (myId == 1)
             localRightY = s.right.y;
         else
